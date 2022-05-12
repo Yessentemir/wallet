@@ -17,6 +17,7 @@ type Service struct {
 	nextAccountID int64 // для генерации уникального номера аккаунта
 	accounts      []*types.Account
 	payments      []*types.Payment
+	favorites     []*types.Favorite
 }
 
 func (s *Service) RegisterAccount(phone types.Phone) (*types.Account, error) {
@@ -136,32 +137,67 @@ func (s *Service) FindPaymentByID(paymentID string) (*types.Payment, error) {
 }
 
 // Repeat позволяет по идентификатору платежа повторить платеж
- func (s *Service) Repeat(paymentID string) (*types.Payment, error) {
-	payment, err := s.FindPaymentByID(paymentID) // поиск платежа по идентификатору который необходимо повторить
+func (s *Service) Repeat(paymentID string) (*types.Payment, error) {
+	var payment *types.Payment
+	// trying to find payment by ID
+	payment, err := s.FindPaymentByID(paymentID)
 	if err != nil {
 		return nil, err
 	}
-	account, err := s.FindAccountByID(payment.AccountID) // поиск аккаунта по идентификатору, который принадлежит платежу который необходимо повторить
+	// trying to repeat payment struct
+	repeadet, err := s.Pay(payment.AccountID, payment.Amount, payment.Category)
 	if err != nil {
 		return nil, err
 	}
-
-	if account.Balance < payment.Amount { // проверка на наличие денег на аккаунте
-		return nil, ErrNotEnoughBalance
-	}
-
-	account.Balance -= payment.Amount // списание денег с аккаунта
-	paymentID = uuid.New().String() // генерация нового идентификатора платежа
-	paymentNew := &types.Payment{ // создание нового платежа
-		ID:        paymentID,
-		AccountID: account.ID,
-		Amount:    payment.Amount,
-		Category:  payment.Category,
-		Status:    types.PaymentStatusInProgress,
-	}
-	s.payments = append(s.payments, paymentNew) // добавление платежа в список платежей
-	return payment, nil
+	return repeadet, nil
 }
- 
 
+// Создаёт избранное из конкретного платежа
+func (s *Service) FavoritePayment(paymentID string, name string) (*types.Favorite, error) {
+	var payment *types.Payment
+	// trying to find payment by ID
+	payment, err := s.FindPaymentByID(paymentID)
+	if err != nil {
+		return nil, err
+	}
 
+	account, err := s.FindAccountByID(payment.AccountID)
+	if err != nil {
+		return nil, err
+	}
+
+	// trying to create favorite
+	favorite := &types.Favorite{
+		ID:        uuid.New().String(),
+		AccountID: account.ID,
+		Name:      name,
+		Amount:   payment.Amount,
+		Category:  payment.Category,
+	}
+	s.favorites = append(s.favorites, favorite)
+	return favorite, nil	
+}
+
+// FindFavoriteByID позволяет найти платеж по идентификатору
+func (s *Service) FindFavoriteByID(favoriteID string) (*types.Favorite, error) {
+	for _, favorite := range s.favorites {	
+		if favorite.ID == favoriteID {
+			return favorite, nil
+		}
+	}
+
+	return nil, ErrPaymentNotFound
+}
+
+// Совершает платёж из конкретного избранного
+func (s *Service) PayFromFavorite(favoriteID string) (*types.Payment, error) {
+	var favorite *types.Favorite
+	// trying to find favorite by ID
+	favorite, err := s.FindFavoriteByID(favoriteID)
+	if err != nil {
+		return nil, err
+	}
+	// trying to pay from favorite
+	return s.Pay(favorite.AccountID, favorite.Amount, favorite.Category)
+	
+}

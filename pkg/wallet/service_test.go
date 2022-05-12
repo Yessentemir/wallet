@@ -99,22 +99,6 @@ func TestService_FindPaymentByID_success(t *testing.T) {
 	}
 }
 
-func (s *testService) addAccountWithBalance(phone types.Phone, balance types.Money) (*types.Account, error) {
-	// регистрируем там пользователя
-	account, err := s.RegisterAccount(phone)
-	if err != nil {
-		return nil, fmt.Errorf("can't register account, error = %v", err)
-	}
-
-	// пополняем его счет
-	err = s.Deposit(account.ID, balance)
-	if err != nil {
-		return nil, fmt.Errorf("can't deposit account, error = %v", err)
-	}
-
-	return account, nil
-}
-
 func TestService_FindPaymentByID_fail(t *testing.T) {
 	// создаем сервис
 	s := newTestService()
@@ -182,4 +166,103 @@ func (s *testService) addAccount(data testAccount) (*types.Account, []*types.Pay
 	}
 
 	return account, payments, nil
+}
+
+//  write a test that creates a payment using the Pay method and then repeats it using the Repeat method
+func TestService_Repeat_success(t *testing.T) {
+	// создаем сервис
+	s := newTestService()
+	_, payments, err := s.addAccount(defaultTestAccount)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	// пробуем повторить платеж
+	payment := payments[0]
+	repeatPayment, err := s.Repeat(payment.ID)
+	if err != nil {
+		t.Errorf("Repeat(): error = %v", err)
+		return
+	}
+
+	// сравниваем платежи(ID, Account, Amount, Category, Status)
+	// сравнием платежи по идентификатору ID
+	if reflect.DeepEqual(payment.ID, repeatPayment.ID) {
+		t.Errorf("Repeat(): payments ID's are not equal = %v", err)
+		return
+	}
+}
+
+
+func TestService_Repeat_fail(t *testing.T) {
+	// создаем сервис
+	s := newTestService()
+	_, _, err := s.addAccount(defaultTestAccount)
+	if err != nil {
+		t.Error(err)
+    }
+	// пробуем повторить платеж
+	_, err = s.Repeat(uuid.New().String())
+	if err == nil {
+		t.Error("Repeat(): must return error, returned nil")
+		return
+	}
+}
+
+func TestService_PayFromFavorite_success(t *testing.T) {
+	// создаем сервис
+	s := newTestService()
+	_, payments, err := s.addAccount(defaultTestAccount)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	// пробуем создать избранное из payment и совершить платеж из него(избранного)
+	payment := payments[0]
+	favoritePayment, err := s.FavoritePayment(payment.ID, "tuitionFee")
+	if err != nil {
+		t.Errorf("FavoritePayment(): error = %v", err)
+		return
+	}
+
+	favoritePay, err := s.PayFromFavorite(favoritePayment.ID)
+	if err != nil {
+		t.Errorf("PayFromFavorite(): error = %v", err)
+		return
+	}
+
+	// сравниваем платежи(Category)
+	if !reflect.DeepEqual(payment.Category, favoritePay.Category) {
+		t.Errorf("PayFromFavorite(): payments categories are not equal = %v", err)
+		return
+	}
+
+    // сравниваем платежи(Amount)
+	if !reflect.DeepEqual(payment.Amount, favoritePay.Amount) {
+		t.Errorf("PayFromFavorite(): payments amounts are not equal = %v", err)
+		return
+	}
+
+	// сравниваем платежи(AccountID)
+	if !reflect.DeepEqual(payment.AccountID, favoritePay.AccountID) {
+		t.Errorf("PayFromFavorite(): payments account IDs are not equal = %v", err)
+		return
+	}
+}
+
+func TestService_PayFromFavorite_fail(t *testing.T) {
+	// создаем сервис
+	s := newTestService()
+	_, _, err := s.addAccount(defaultTestAccount)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	// пробуем создать избранное из payment и совершить платеж из него(избранного)
+	_, err = s.PayFromFavorite(uuid.New().String())
+	if err == nil {
+		t.Error("PayFromFavorite(): must return error, returned nil")
+		return
+	}
 }
